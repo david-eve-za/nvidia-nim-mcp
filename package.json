@@ -1,0 +1,94 @@
+{
+  "name": "nvidia-nim-mcp",
+  "version": "1.0.0",
+  "description": "Production-ready MCP server for NVIDIA NIM models with GLM-5 specialization for software development and architecture",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "bin": {
+    "nvidia-nim-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "scripts",
+    "README.md",
+    "LICENSE",
+    ".env.example"
+  ],
+  "scripts": {
+    "build": "tsc src/index.ts --outDir dist --module NodeNext --moduleResolution NodeNext --target ES2022 --declaration --skipLibCheck && node scripts/add-shebang.js",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "clean": "rm -rf dist",
+    "prebuild": "npm run clean",
+    "lint": "eslint src/**/*.ts",
+    "test": "jest",
+    "check": "npm run lint && npm test",
+    "prepublishOnly": "npm run build",
+    "pack": "npm run build && npm pack",
+    "verify": "node scripts/verify-installation.js",
+    "postinstall": "node scripts/postinstall.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "nvidia",
+    "nim",
+    "glm5",
+    "ai",
+    "llm",
+    "chat",
+    "embeddings",
+    "reranking",
+    "function-calling",
+    "code-generation",
+    "software-development"
+  ],
+  "author": "David Gonzalez <david.eve.za@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "bugs": {
+    "url": ""
+  },
+  "homepage": "",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "axios": "^1.7.7",
+    "axios-retry": "^4.5.0",
+    "dotenv": "^16.4.5",
+    "winston": "^3.14.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.0",
+    "@babel/preset-env": "^7.29.0",
+    "@babel/preset-typescript": "^7.28.5",
+    "@eslint/js": "^10.0.1",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^22.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.56.1",
+    "@typescript-eslint/parser": "^8.56.1",
+    "babel-jest": "^30.2.0",
+    "eslint": "^10.0.2",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.6",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2",
+    "typescript-eslint": "^8.56.1"
+  },
+  "peerDependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  }
+}
