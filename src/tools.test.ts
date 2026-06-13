@@ -6,6 +6,9 @@ import {
   FunctionCallingSchema,
   ListModelsSchema,
   ModelInfoSchema,
+  ImageGenerationSchema,
+  ImageAnalysisSchema,
+  MultimodalTaskSchema,
   TOOL_DEFINITIONS
 } from './tools.js';
 
@@ -21,6 +24,9 @@ describe('Tools', () => {
       expect(toolNames).toContain('function_calling');
       expect(toolNames).toContain('list_models');
       expect(toolNames).toContain('get_model_info');
+      expect(toolNames).toContain('generate_image');
+      expect(toolNames).toContain('analyze_image');
+      expect(toolNames).toContain('multimodal_task');
     });
 
     it('should have proper tool definition structure', () => {
@@ -338,6 +344,211 @@ describe('Tools', () => {
       };
 
       expect(() => ModelInfoSchema.parse(validInput)).not.toThrow();
+    });
+
+    it('should accept optional connection_profile', () => {
+      const validInput = {
+        model_id: 'meta/llama-3.1-405b-instruct',
+        connection_profile: 'primary',
+      };
+
+      expect(() => ModelInfoSchema.parse(validInput)).not.toThrow();
+    });
+  });
+
+  describe('ImageGenerationSchema', () => {
+    it('should validate correct image generation input', () => {
+      const validInput = {
+        prompt: 'A beautiful sunset over mountains',
+      };
+
+      expect(() => ImageGenerationSchema.parse(validInput)).not.toThrow();
+    });
+
+    it('should reject invalid image generation input', () => {
+      const invalidInput = {
+        // Missing required prompt field
+      };
+
+      expect(() => ImageGenerationSchema.parse(invalidInput)).toThrow();
+    });
+
+    it('should accept optional fields', () => {
+      const validInput = {
+        model: 'nvidia/stable-diffusion-xl',
+        prompt: 'A beautiful sunset over mountains',
+        negative_prompt: 'blurry, low quality',
+        width: 1024,
+        height: 1024,
+        num_images: 2,
+        steps: 30,
+        cfg_scale: 7.5,
+        seed: 42,
+        sampler: 'euler_a',
+        scheduler: 'karras',
+        response_format: 'url' as const,
+        connection_profile: 'primary',
+      };
+
+      expect(() => ImageGenerationSchema.parse(validInput)).not.toThrow();
+    });
+
+    it('should enforce value constraints', () => {
+      const invalidInput = {
+        prompt: 'Test',
+        width: 5000, // Too large
+      };
+
+      expect(() => ImageGenerationSchema.parse(invalidInput)).toThrow();
+    });
+
+    it('should enforce num_images max constraint', () => {
+      const invalidInput = {
+        prompt: 'Test',
+        num_images: 10, // Max is 4
+      };
+
+      expect(() => ImageGenerationSchema.parse(invalidInput)).toThrow();
+    });
+  });
+
+  describe('ImageAnalysisSchema', () => {
+    it('should validate correct image analysis input', () => {
+      const validInput = {
+        image_url: 'https://example.com/image.jpg',
+        prompt: 'Describe this image',
+      };
+
+      expect(() => ImageAnalysisSchema.parse(validInput)).not.toThrow();
+    });
+
+    it('should reject invalid image analysis input', () => {
+      const invalidInput = {
+        // Missing required fields
+        prompt: 'Describe this image',
+      };
+
+      expect(() => ImageAnalysisSchema.parse(invalidInput)).toThrow();
+    });
+
+    it('should accept optional fields', () => {
+      const validInput = {
+        model: 'meta/llama-3.2-90b-vision-instruct',
+        image_url: 'https://example.com/image.jpg',
+        prompt: 'What objects are in this image?',
+        system_prompt: 'You are a helpful image analyst',
+        temperature: 0.3,
+        top_p: 0.95,
+        max_tokens: 1024,
+        detail: 'high' as const,
+        connection_profile: 'primary',
+      };
+
+      expect(() => ImageAnalysisSchema.parse(validInput)).not.toThrow();
+    });
+
+    it('should reject invalid image_url', () => {
+      const invalidInput = {
+        image_url: 'not-a-valid-url',
+        prompt: 'Describe this image',
+      };
+
+      expect(() => ImageAnalysisSchema.parse(invalidInput)).toThrow();
+    });
+
+    it('should enforce detail enum constraint', () => {
+      const invalidInput = {
+        image_url: 'https://example.com/image.jpg',
+        prompt: 'Describe this image',
+        detail: 'invalid' as any,
+      };
+
+      expect(() => ImageAnalysisSchema.parse(invalidInput)).toThrow();
+    });
+  });
+
+  describe('MultimodalTaskSchema', () => {
+    it('should validate correct multimodal task input', () => {
+      const validInput = {
+        messages: [
+          { role: 'user', content: 'Hello' },
+        ],
+      };
+
+      expect(() => MultimodalTaskSchema.parse(validInput)).not.toThrow();
+    });
+
+    it('should reject invalid multimodal task input', () => {
+      const invalidInput = {
+        // Missing required messages field
+      };
+
+      expect(() => MultimodalTaskSchema.parse(invalidInput)).toThrow();
+    });
+
+    it('should accept messages with image content', () => {
+      const validInput = {
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Describe this image' },
+              { type: 'image_url', image_url: { url: 'https://example.com/image.jpg', detail: 'high' } },
+            ],
+          },
+        ],
+      };
+
+      expect(() => MultimodalTaskSchema.parse(validInput)).not.toThrow();
+    });
+
+    it('should accept optional fields', () => {
+      const validInput = {
+        model: 'nvidia/neva-22b',
+        messages: [
+          { role: 'user', content: 'Analyze this image' },
+        ],
+        temperature: 0.3,
+        top_p: 0.95,
+        max_tokens: 2048,
+        stream: false,
+        connection_profile: 'primary',
+      };
+
+      expect(() => MultimodalTaskSchema.parse(validInput)).not.toThrow();
+    });
+
+    it('should enforce array minItems constraint', () => {
+      const invalidInput = {
+        messages: [], // Empty array
+      };
+
+      expect(() => MultimodalTaskSchema.parse(invalidInput)).toThrow();
+    });
+  });
+
+  describe('ListModelsSchema (enhanced)', () => {
+    it('should accept new category values', () => {
+      const validInputs = [
+        { category: 'image_generation' },
+        { category: 'multimodal' },
+        { category: 'vision' },
+        { category: 'all' },
+      ];
+
+      validInputs.forEach(input => {
+        expect(() => ListModelsSchema.parse(input)).not.toThrow();
+      });
+    });
+
+    it('should accept include_details flag', () => {
+      const validInput = {
+        category: 'language',
+        include_details: true,
+        connection_profile: 'primary',
+      };
+
+      expect(() => ListModelsSchema.parse(validInput)).not.toThrow();
     });
   });
 });

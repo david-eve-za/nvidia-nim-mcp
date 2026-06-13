@@ -1,0 +1,25 @@
+{
+  "servers": {
+    "nvidia-nim": {
+      "command": "node",
+      "args": ["${workspaceFolder}/dist/index.js"],
+      "env": {
+        "NVIDIA_API_KEY": "${env:NVIDIA_API_KEY}",
+        "NVIDIA_NIM_BASE_URL": "https://integrate.api.nvidia.com/v1",
+        "LOG_LEVEL": "info",
+        "ENABLE_IMAGE_GENERATION": "true",
+        "ENABLE_VISION": "true",
+        "ENABLE_MULTIMODAL": "true"
+      },
+      "type": "stdio"
+    }
+  },
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "NVIDIA_API_KEY",
+      "description": "Your NVIDIA NGC API Key (nvapi-...)",
+      "password": true
+    }
+  ]
+}

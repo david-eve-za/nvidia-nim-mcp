@@ -1,18 +1,20 @@
 # NVIDIA NIM MCP Server
 
-A production-ready **Model Context Protocol (MCP)** server for consuming **NVIDIA NIM** (NVIDIA Inference Microservices) models. Supports LLMs, embeddings, reranking, function calling, and vision models.
+A production-ready **Model Context Protocol (MCP)** server for consuming **NVIDIA NIM** (NVIDIA Inference Microservices) models. Supports 50+ LLMs, multimodal models, image generation, embeddings, reranking, function calling, vision, and code-specialized models with rich metadata for intelligent agent selection.
 
 ---
 
 ## 🚀 Features
 
-- **7 MCP Tools**: chat completion, text generation, embeddings, reranking, function calling, model listing, and model info
-- **20+ Supported Models**: Llama 3.1/3.2, Mistral, Mixtral, Phi-3, Gemma 2, Qwen 2.5, Nemotron, and more
+- **10 MCP Tools**: chat completion, text generation, embeddings, reranking, function calling, model listing, model info, **image generation**, **image analysis**, **multimodal tasks**, **model comparison**
+- **50+ Supported Models**: Llama 3.1/3.2, Nemotron 3 Ultra (550B), MiniMax M3, Kimi K2.6 (1T), DeepSeek V4 Pro, GLM 5.1, Qwen 3.5 397B, Mistral Large 3 (675B), GPT-OSS 120B, DiffusionGemma, FLUX.1, SDXL, SD3, and more
+- **Rich Model Metadata**: licensing, hardware requirements, benchmarks, image generation specs, reasoning modes, tags for agent selection
+- **Advanced Filtering**: by commercial use, reasoning, vision, function calling, multimodal, context length, tags, hardware
 - **Production-Grade**: automatic retries with exponential backoff, per-minute rate limiting, structured JSON logging
 - **Type-Safe**: full TypeScript, Zod input validation on every tool
 - **Docker-Ready**: multi-stage Dockerfile with non-root user, health checks
 - **Configurable**: all settings via environment variables
-- **Multiple Distribution Formats**: NPM package, Docker image, standalone executable
+- **Single Required Env**: Only `NVIDIA_API_KEY` required; all others have sensible defaults
 
 ---
 
@@ -81,17 +83,22 @@ Copy `.env.example` to `.env` and fill in your API key:
 cp .env.example .env
 ```
 
+**Only `NVIDIA_API_KEY` is required** — all other variables have production-ready defaults:
+
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `NVIDIA_API_KEY` | ✅ | — | Your NVIDIA NGC API key |
 | `NVIDIA_NIM_BASE_URL` | ❌ | `https://integrate.api.nvidia.com/v1` | Base URL for NIM API |
-| `DEFAULT_MODEL` | ❌ | `z-ai/glm5` | Default model for completions (specialized in software development) |
+| `DEFAULT_MODEL` | ❌ | `black-forest-labs/flux.1-dev` | Default model (best image generation) |
 | `MAX_REQUESTS_PER_MINUTE` | ❌ | `40` | Rate limit cap (NVIDIA API limit) |
 | `MAX_TOKENS_PER_REQUEST` | ❌ | `4096` | Hard cap on tokens per request |
 | `REQUEST_TIMEOUT_MS` | ❌ | `120000` | Request timeout (ms) |
 | `MAX_RETRIES` | ❌ | `3` | Max retry attempts on failure |
 | `RETRY_DELAY_MS` | ❌ | `1000` | Base delay between retries (ms) |
 | `LOG_LEVEL` | ❌ | `info` | `error\|warn\|info\|debug` |
+| `ENABLE_IMAGE_GENERATION` | ❌ | `true` | Enable image generation tools |
+| `ENABLE_VISION` | ❌ | `true` | Enable vision/multimodal tools |
+| `ENABLE_MULTIMODAL` | ❌ | `true` | Enable multimodal task tools |
 
 ---
 
@@ -164,7 +171,6 @@ NVIDIA_API_KEY=nvapi-your-key ./dist/index.js
       "command": "nvidia-nim-mcp",
       "env": {
         "NVIDIA_API_KEY": "nvapi-your-key-here",
-        "DEFAULT_MODEL": "z-ai/glm5",
         "LOG_LEVEL": "info"
       }
     }
@@ -181,7 +187,6 @@ NVIDIA_API_KEY=nvapi-your-key ./dist/index.js
       "args": ["nvidia-nim-mcp"],
       "env": {
         "NVIDIA_API_KEY": "nvapi-your-key-here",
-        "DEFAULT_MODEL": "z-ai/glm5",
         "LOG_LEVEL": "info"
       }
     }
@@ -198,7 +203,6 @@ NVIDIA_API_KEY=nvapi-your-key ./dist/index.js
       "args": ["/absolute/path/to/nvidia-nim-mcp/dist/index.js"],
       "env": {
         "NVIDIA_API_KEY": "nvapi-your-key-here",
-        "DEFAULT_MODEL": "z-ai/glm5",
         "LOG_LEVEL": "info"
       }
     }
@@ -215,12 +219,12 @@ Multi-turn conversation with any NIM LLM.
 
 ```json
 {
-  "model": "z-ai/glm5",
+  "model": "nvidia/nemotron-3-ultra-550b-a55b",
   "messages": [
     { "role": "user", "content": "Explain quantum computing" }
   ],
   "temperature": 0.3,
-  "max_tokens": 2048
+  "max_tokens": 4096
 }
 ```
 
@@ -230,7 +234,8 @@ Single-prompt text generation (simplified interface).
 ```json
 {
   "prompt": "Write a haiku about machine learning",
-  "temperature": 0.5
+  "temperature": 0.5,
+  "max_tokens": 512
 }
 ```
 
@@ -261,7 +266,7 @@ Use NIM models with tool/function calling.
 
 ```json
 {
-  "model": "z-ai/glm5",
+  "model": "z-ai/glm-5.1",
   "messages": [{ "role": "user", "content": "What's the weather in Paris?" }],
   "tools": [{
     "type": "function",
@@ -278,31 +283,162 @@ Use NIM models with tool/function calling.
 }
 ```
 
-### `list_models`
-List available models filtered by category.
+### `generate_image`
+Generate images from text prompts using FLUX.1, SDXL, SD3, DiffusionGemma.
 
 ```json
-{ "category": "embedding" }
+{
+  "model": "black-forest-labs/flux.1-dev",
+  "prompt": "A photorealistic mountain landscape at sunset, 8K",
+  "width": 1024,
+  "height": 1024,
+  "steps": 30,
+  "cfg_scale": 3.5,
+  "sampler": "euler_a",
+  "scheduler": "simple"
+}
 ```
+
+### `analyze_image`
+Analyze and describe images using vision/multimodal models.
+
+```json
+{
+  "model": "moonshotai/kimi-k2.6",
+  "image_url": "https://example.com/image.jpg",
+  "prompt": "Describe this image in detail",
+  "detail": "high"
+}
+```
+
+### `multimodal_task`
+Perform multimodal tasks combining text and images.
+
+```json
+{
+  "model": "minimaxai/minimax-m3",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Analyze this chart" },
+        { "type": "image_url", "image_url": { "url": "https://example.com/chart.png" } }
+      ]
+    }
+  ],
+  "max_tokens": 2048
+}
+```
+
+### `list_models`
+List available models with rich metadata and advanced filtering.
+
+```json
+{
+  "category": "code",
+  "commercial_use": true,
+  "supports_reasoning": true,
+  "tags": ["coding", "agentic"],
+  "include_details": true
+}
+```
+
+**Filter Options:**
+- `category`: `language`, `embedding`, `reranking`, `vision`, `code`, `multimodal`, `image_generation`, `all`
+- `commercial_use`: Filter by commercial license
+- `supports_reasoning`: Filter by reasoning capability
+- `supports_vision`: Filter by vision capability
+- `supports_function_calling`: Filter by function calling
+- `supports_multimodal`: Filter by multimodal input
+- `min_context_length`: Minimum context window (tokens)
+- `tags`: Filter by use case tags
+- `hardware`: Filter by GPU type (Hopper, Blackwell, Ampere)
+- `include_details`: Include full metadata (benchmarks, image specs, etc.)
 
 ### `get_model_info`
-Get details about a specific model.
+Get complete metadata for a specific model.
 
 ```json
-{ "model_id": "meta/llama-3.1-405b-instruct" }
+{ "model_id": "nvidia/nemotron-3-ultra-550b-a55b" }
 ```
+
+**Returns:** licensing, hardware requirements, benchmarks, image gen specs, reasoning modes, tags, supported languages, etc.
+
+### `compare_models`
+Compare 2-5 models side-by-side across all decision factors.
+
+```json
+{
+  "model_ids": [
+    "nvidia/nemotron-3-ultra-550b-a55b",
+    "deepseek-ai/deepseek-v4-pro",
+    "moonshotai/kimi-k2.6",
+    "z-ai/glm-5.1"
+  ]
+}
+```
+
+**Returns:** Structured comparison table with licensing, hardware, benchmarks, capabilities, tags, image generation specs, etc.
 
 ---
 
-## 📦 Supported Models
+## 📦 Supported Models (50+)
 
-| Category | Models |
-|---|---|
-| **Language** | Llama 3.1 (8B/70B/405B), Mistral Large 2, Mixtral 8x22B/8x7B, Phi-3.5 Mini, Gemma 2 (9B/27B), Qwen 2.5 72B, Nemotron 70B, GLM-4 9B |
-| **Code** | Qwen 2.5 Coder 32B, **GLM-5** (default - specialized in software development & architecture) |
-| **Vision** | Llama 3.2 Vision (11B/90B) |
-| **Embeddings** | NV-Embed v1, NV-EmbedQA E5 v5, BGE-M3 |
-| **Reranking** | NV-RerankQA Mistral 4B v3 |
+### Language Models (Frontier Reasoning)
+
+| Model | Parameters | Context | License | Commercial | Best For |
+|---|---|---|---|---|---|
+| `nvidia/nemotron-3-ultra-550b-a55b` | 550B (55B active) | 131K | OpenMDW-1.1 | ✅ | Frontier reasoning, coding, agentic, 1M context, multilingual |
+| `nvidia/nemotron-3-ultra-550b-a55b-instruct` | 550B | 131K | OpenMDW-1.1 | ✅ | Instruction-tuned variant |
+| `minimaxai/minimax-m3` | 428B (22B active) | 1M | Non-Commercial | ❌ | Multimodal, video (30min), 8hr coding, agentic |
+| `moonshotai/kimi-k2.6` | 1T (32B active) | 256K | Modified MIT | ✅ | Long-horizon coding, 300 agents, vision, agentic |
+| `deepseek-ai/deepseek-v4-pro` | 1.6T (49B active) | 1M | MIT | ✅ | Advanced coding, math, reasoning, 3 reasoning modes |
+| `z-ai/glm-5.1` | 754B (DSA) | 131K | MIT | ✅ | Software engineering, agentic, SWE-Bench 58.4% |
+| `qwen/qwen3.5-397b-a17b` | 397B (MoE) | 131K | Research | ❌ | Large-scale multilingual, multimodal |
+| `mistralai/mistral-large-3-675b-instruct-2512` | 675B | 131K | Research | ❌ | Frontier reasoning, multimodal |
+| `openai/gpt-oss-120b` | 120B | 131K | Apache 2.0 | ✅ | Open-weight, research, fine-tuning |
+| `google/diffusiongemma-26b-a4b-it` | 25.2B (3.8B active) | 256K | Apache 2.0 | ✅ | Diffusion text gen, 35+ langs, fast, multimodal |
+
+### Code-Specialized Models
+
+| Model | Parameters | Context | License | Commercial |
+|---|---|---|---|---|
+| `z-ai/glm-5.1` | 754B | 131K | MIT | ✅ |
+| `z-ai/glm5` | - | 128K | Z.ai | ✅ |
+| `qwen/qwen2.5-coder-32b-instruct` | 32B | 131K | Research | ❌ |
+
+### Multimodal / Vision Models
+
+| Model | Parameters | Context | Vision | Video | License | Commercial |
+|---|---|---|---|---|---|---|
+| `meta/llama-3.2-90b-vision-instruct` | 90B | 128K | ✅ | ❌ | Llama 3.2 | ✅ |
+| `meta/llama-3.2-11b-vision-instruct` | 11B | 128K | ✅ | ❌ | Llama 3.2 | ✅ |
+| `nvidia/neva-22b` | 22B | 4K | ✅ | ❌ | NVIDIA | ✅ |
+| `microsoft/phi-3.5-vision-instruct` | - | 128K | ✅ | ❌ | MIT | ✅ |
+| `minimaxai/minimax-m3` | 428B | 1M | ✅ | ✅ (30min) | Non-Commercial | ❌ |
+| `moonshotai/kimi-k2.6` | 1T | 256K | ✅ | ✅ | Modified MIT | ✅ |
+
+### Image Generation Models
+
+| Model | Architecture | Resolutions | Aspect Ratios | Max Images | ControlNet | License | Commercial |
+|---|---|---|---|---|---|---|---|
+| `black-forest-labs/flux.1-dev` | Diffusion Transformer | 1024², 1152×896, 1344×768, 21:9 | 1:1, 16:9, 9:16, 4:3, 3:4, 21:9 | 1 | Canny, Depth | Apache 2.0* | ❌* |
+| `black-forest-labs/flux.1-kontext-dev` | Diffusion Transformer | Same | Same | 1 | - | Apache 2.0* | ❌* |
+| `nvidia/stable-diffusion-xl` | UNet + Attention | 1024², 1152×896, 1216×832 | 1:1, 16:9, 9:16, 4:3, 3:4 | 4 | - | SDXL 1.0 | ✅** |
+| `stabilityai/sd-3-medium` | SD3 | Same | Same | 2 | - | Stability AI | ✅** |
+| `nvidia/sdxl-turbo` | ADD | 512², 1024² | 1:1 | 4 | - | SDXL 1.0 | ✅** |
+
+*\*Non-commercial default; commercial via contact*  
+**\*\*Requires Stability AI membership**
+
+### Embeddings & Reranking
+
+| Model | Type | Context | Dimensions | License | Commercial |
+|---|---|---|---|---|---|
+| `nvidia/nv-embedqa-e5-v5` | Embedding | 512 | - | NVIDIA | ✅ |
+| `nvidia/nv-embed-v1` | Embedding | 4096 | - | NVIDIA | ✅ |
+| `baai/bge-m3` | Embedding | 8192 | - | MIT | ✅ |
+| `nvidia/nv-rerankqa-mistral-4b-v3` | Reranking | 4096 | - | NVIDIA | ✅ |
 
 ---
 
@@ -319,13 +455,17 @@ Get details about a specific model.
 - [x] Docker multi-stage build (minimal image)
 - [x] Non-root Docker user
 - [x] Token cap enforcement
+- [x] Single required env var (`NVIDIA_API_KEY`)
+- [x] Feature flags for optional capabilities
+
+---
 
 ## 🧪 Testing
 
-The project includes a comprehensive test suite with over 60 tests covering:
+The project includes a comprehensive test suite:
 
-- **Unit Tests**: Configuration, logging, model handling, and tool validation
-- **Integration Tests**: All 7 MCP tools with various input scenarios
+- **Unit Tests**: Configuration, logging, model handling, tool validation
+- **Integration Tests**: All 10 MCP tools with various input scenarios
 - **Error Handling**: Validation of edge cases and failure modes
 - **Schema Validation**: Zod-based input validation for all tools
 
@@ -345,7 +485,9 @@ npm test -- --watch
 npm test src/handlers.test.ts
 ```
 
-**Current Test Status**: ✅ All tests passing (62/62 tests)
+**Current Test Status**: ✅ All tests passing (96 tests)
+
+---
 
 ## 🛠️ Development
 
@@ -378,9 +520,11 @@ npm test
 npm run check
 ```
 
+---
+
 ## 🤝 Contributing
 
-Contributions are welcome! Here's how you can contribute:
+Contributions are welcome!
 
 1. **Fork the Repository**
 2. **Create a Feature Branch**: `git checkout -b feature/your-feature-name`
@@ -388,8 +532,8 @@ Contributions are welcome! Here's how you can contribute:
 4. **Add Tests**: Ensure new functionality is properly tested
 5. **Run Checks**: `npm run check` to verify code quality and tests
 6. **Commit Changes**: Use clear, descriptive commit messages
-7. **Push to Your Fork**: `git push origin feature/your-feature-name`
-8. **Open a Pull Request**: Describe your changes and their benefits
+6. **Push to Your Fork**: `git push origin feature/your-feature-name`
+7. **Open a Pull Request**: Describe your changes and their benefits
 
 ### Code Standards
 
@@ -407,9 +551,9 @@ Contributions are welcome! Here's how you can contribute:
 4. **Building**: Use `npm run build` to compile the project
 5. **Linting**: Run `npm run lint` to check code quality
 
-## 📦 Packaging & Distribution
+---
 
-This project can be distributed and deployed in multiple formats:
+## 📦 Packaging & Distribution
 
 ### NPM Package
 - Published to npm registry for easy installation
@@ -429,6 +573,7 @@ This project can be distributed and deployed in multiple formats:
 - No installation required beyond Node.js
 
 ### Building Packages
+
 ```bash
 # Build the project
 npm run build
@@ -442,6 +587,8 @@ docker build -t nvidia-nim-mcp .
 # All checks (lint, test, build)
 npm run check && npm run build
 ```
+
+---
 
 ## 📄 License
 

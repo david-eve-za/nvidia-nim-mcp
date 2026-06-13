@@ -1,16 +1,12 @@
-
 import { z } from "zod";
 
 const ConfigSchema = z.object({
-  // NVIDIA API
+  // NVIDIA API - Primary connection
   NVIDIA_API_KEY: z.string().min(1, "NVIDIA_API_KEY is required"),
   NVIDIA_NIM_BASE_URL: z
     .string()
     .url()
     .default("https://integrate.api.nvidia.com/v1"),
-  NVIDIA_CHAT_MODEL: z.string().optional(),
-  NVIDIA_EMBEDDINGS_MODEL: z.string().optional(),
-  NVIDIA_RERANKING_MODEL: z.string().optional(),
 
   // Server
   MCP_SERVER_NAME: z.string().default("nvidia-nim-mcp"),
@@ -34,6 +30,15 @@ const ConfigSchema = z.object({
   DEFAULT_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.3),
   DEFAULT_TOP_P: z.coerce.number().min(0).max(1).default(0.95),
   DEFAULT_MAX_TOKENS: z.coerce.number().int().positive().default(4096),
+
+  // Image Generation
+  DEFAULT_IMAGE_MODEL: z.string().default("black-forest-labs/flux.1-dev"),
+  IMAGE_GENERATION_TIMEOUT_MS: z.coerce.number().int().positive().default(300000),
+
+  // Feature flags
+  ENABLE_IMAGE_GENERATION: z.coerce.boolean().default(true),
+  ENABLE_VISION: z.coerce.boolean().default(true),
+  ENABLE_MULTIMODAL: z.coerce.boolean().default(true),
 });
 
 export class ConfigError extends Error {

@@ -1,4 +1,4 @@
-import { NIMClient, ChatMessage } from "./client.js";
+import { NIMClient, ChatMessage, ImageGenerationRequest, ImageAnalysisRequest } from "./client.js";
 import { NIM_MODELS, getModelsByCategory, getModel } from "./models.js";
 import { getConfig } from "./config.js";
 import { logger } from "./logger.js";
@@ -10,6 +10,10 @@ import {
   FunctionCallingSchema,
   ListModelsSchema,
   ModelInfoSchema,
+  ImageGenerationSchema,
+  ImageAnalysisSchema,
+  MultimodalTaskSchema,
+  CompareModelsSchema,
 } from "./tools.js";
 
 const config = getConfig();
@@ -62,6 +66,18 @@ export class ToolHandlers {
           break;
         case "get_model_info":
           result = await this.getModelInfo(rawArgs);
+          break;
+        case "generate_image":
+          result = await this.generateImage(rawArgs);
+          break;
+        case "analyze_image":
+          result = await this.analyzeImage(rawArgs);
+          break;
+        case "multimodal_task":
+          result = await this.multimodalTask(rawArgs);
+          break;
+        case "compare_models":
+          result = await this.compareModels(rawArgs);
           break;
         default:
           result = err(`Unknown tool: ${toolName}`);
@@ -239,6 +255,127 @@ export class ToolHandlers {
     });
   }
 
+  private async generateImage(rawArgs: unknown): Promise<ToolResult> {
+    if (!config.ENABLE_IMAGE_GENERATION) {
+      return err("Image generation is disabled. Set ENABLE_IMAGE_GENERATION=true to enable.");
+    }
+
+    const args = ImageGenerationSchema.parse(rawArgs);
+    const model = args.model ?? config.DEFAULT_IMAGE_MODEL;
+
+    const request: ImageGenerationRequest = {
+      model,
+      prompt: args.prompt,
+      negative_prompt: args.negative_prompt,
+      width: args.width,
+      height: args.height,
+      num_images: args.num_images,
+      steps: args.steps,
+      cfg_scale: args.cfg_scale,
+      seed: args.seed,
+      sampler: args.sampler,
+      scheduler: args.scheduler,
+      response_format: args.response_format,
+    };
+
+    const response = await this.client.generateImage(request);
+
+    return ok({
+      model: response.model ?? model,
+      created: response.created,
+      images: response.data.map((img, idx) => ({
+        index: idx,
+        url: img.url,
+        b64_json: img.b64_json,
+        revised_prompt: img.revised_prompt,
+      })),
+      usage: response.usage,
+    });
+  }
+
+  private async analyzeImage(rawArgs: unknown): Promise<ToolResult> {
+    if (!config.ENABLE_VISION) {
+      return err("Vision capabilities are disabled. Set ENABLE_VISION=true to enable.");
+    }
+
+    const args = ImageAnalysisSchema.parse(rawArgs);
+    const model = args.model ?? "meta/llama-3.2-90b-vision-instruct";
+
+    const messages: ChatMessage[] = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: args.prompt },
+          { type: "image_url", image_url: { url: args.image_url, detail: args.detail } },
+        ],
+      },
+    ];
+
+    if (args.system_prompt) {
+      messages.unshift({ role: "system", content: args.system_prompt });
+    }
+
+    const request: ImageAnalysisRequest = {
+      model,
+      messages,
+      temperature: args.temperature,
+      top_p: args.top_p,
+      max_tokens: args.max_tokens,
+      stream: false,
+    };
+
+    const response = await this.client.analyzeImage(request);
+
+    return ok({
+      model: response.model,
+      analysis: response.choices[0].message.content,
+      finish_reason: response.choices[0].finish_reason,
+      usage: response.usage,
+    });
+  }
+
+  private async multimodalTask(rawArgs: unknown): Promise<ToolResult> {
+    if (!config.ENABLE_MULTIMODAL) {
+      return err("Multimodal capabilities are disabled. Set ENABLE_MULTIMODAL=true to enable.");
+    }
+
+    const args = MultimodalTaskSchema.parse(rawArgs);
+    const model = args.model ?? "nvidia/neva-22b";
+
+    const messages: ChatMessage[] = args.messages.map((msg) => {
+      const content = typeof msg.content === "string"
+        ? msg.content
+        : msg.content.map((part) => {
+            if (part.type === "text") {
+              return { type: "text" as const, text: part.text ?? "" };
+            }
+            return {
+              type: "image_url" as const,
+              image_url: { url: part.image_url!.url, detail: part.image_url!.detail },
+            };
+          });
+      return { role: msg.role, content };
+    });
+
+    const response = await this.client.chatCompletion(
+      {
+        model,
+        messages,
+        temperature: args.temperature,
+        top_p: args.top_p,
+        max_tokens: args.max_tokens,
+        stream: args.stream,
+      }
+    );
+
+    return ok({
+      model: response.model,
+      content: response.choices[0].message.content,
+      finish_reason: response.choices[0].finish_reason,
+      usage: response.usage,
+    });
+  }
+
   private async listModels(rawArgs: unknown): Promise<ToolResult> {
     const args = ListModelsSchema.parse(rawArgs);
 
@@ -246,13 +383,37 @@ export class ToolHandlers {
     if (args.category === "all") {
       models = Object.values(NIM_MODELS);
     } else {
-      models = getModelsByCategory(args.category);
+      models = getModelsByCategory(args.category as any);
     }
 
-    return ok({
-      total: models.length,
-      category: args.category,
-      models: models.map((m) => ({
+    // Apply additional filters
+    if (args.commercial_use !== undefined) {
+      models = models.filter((m) => m.commercialUse === args.commercial_use);
+    }
+    if (args.supports_reasoning !== undefined) {
+      models = models.filter((m) => m.supportsReasoning === args.supports_reasoning);
+    }
+    if (args.supports_vision !== undefined) {
+      models = models.filter((m) => m.supportsVision === args.supports_vision);
+    }
+    if (args.supports_function_calling !== undefined) {
+      models = models.filter((m) => m.supportsFunctionCalling === args.supports_function_calling);
+    }
+    if (args.supports_multimodal !== undefined) {
+      models = models.filter((m) => m.supportsMultimodalInput === args.supports_multimodal);
+    }
+    if (args.min_context_length !== undefined) {
+      models = models.filter((m) => m.contextLength >= args.min_context_length!);
+    }
+    if (args.tags && args.tags.length > 0) {
+      models = models.filter((m) => m.tags?.some((t) => args.tags!.includes(t)));
+    }
+    if (args.hardware && args.hardware.length > 0) {
+      models = models.filter((m) => m.supportedHardware?.some((h) => args.hardware!.includes(h)));
+    }
+
+    const modelList = models.map((m) => {
+      const base = {
         id: m.id,
         name: m.name,
         category: m.category,
@@ -261,7 +422,40 @@ export class ToolHandlers {
         supports_streaming: m.supportsStreaming,
         supports_function_calling: m.supportsFunctionCalling,
         supports_vision: m.supportsVision ?? false,
-      })),
+        supports_image_generation: m.supportsImageGeneration ?? false,
+        supports_multimodal: m.supportsMultimodalInput ?? false,
+        supports_reasoning: m.supportsReasoning ?? false,
+        commercial_use: m.commercialUse,
+        license: m.license,
+        tags: m.tags ?? [],
+        min_gpu_requirements: m.minGpuRequirements ?? [],
+        supported_hardware: m.supportedHardware ?? [],
+        runtime_engines: m.runtimeEngines ?? [],
+      };
+
+      if (args.include_details) {
+        return {
+          ...base,
+          max_tokens: m.maxTokens,
+          output_max_tokens: m.outputMaxTokens,
+          recommended_use_cases: m.recommendedUseCases ?? getUseCases(m.category),
+          parameters: m.parameters,
+          image_gen_specs: m.imageGenSpecs,
+          benchmarks: m.benchmarks,
+          deployment_notes: m.deploymentNotes,
+          supports_structured_output: m.supportsStructuredOutput,
+          reasoning_modes: m.reasoningModes,
+          supported_languages: m.supportedLanguages,
+          supports_video_input: m.supportsVideoInput,
+        };
+      }
+      return base;
+    });
+
+    return ok({
+      total: modelList.length,
+      category: args.category,
+      models: modelList,
     });
   }
 
@@ -284,7 +478,76 @@ export class ToolHandlers {
       supports_streaming: model.supportsStreaming,
       supports_function_calling: model.supportsFunctionCalling,
       supports_vision: model.supportsVision ?? false,
-      recommended_use_cases: getUseCases(model.category),
+      supports_image_generation: model.supportsImageGeneration ?? false,
+      supports_multimodal: model.supportsMultimodalInput ?? false,
+      supports_reasoning: model.supportsReasoning ?? false,
+      commercial_use: model.commercialUse,
+      license: model.license,
+      third_party_model: model.thirdPartyModel,
+      max_tokens: model.maxTokens,
+      output_max_tokens: model.outputMaxTokens,
+      recommended_use_cases: model.recommendedUseCases ?? getUseCases(model.category),
+      parameters: model.parameters,
+      image_gen_specs: model.imageGenSpecs,
+      benchmarks: model.benchmarks,
+      deployment_notes: model.deploymentNotes,
+      min_gpu_requirements: model.minGpuRequirements,
+      supported_hardware: model.supportedHardware,
+      runtime_engines: model.runtimeEngines,
+      tags: model.tags,
+      supports_structured_output: model.supportsStructuredOutput,
+      reasoning_modes: model.reasoningModes,
+      supported_languages: model.supportedLanguages,
+      supports_video_input: model.supportsVideoInput,
+    });
+  }
+
+  private async compareModels(rawArgs: unknown): Promise<ToolResult> {
+    const args = CompareModelsSchema.parse(rawArgs);
+    const models = args.model_ids.map((id) => getModel(id)).filter((m): m is NonNullable<typeof m> => m !== undefined);
+
+    if (models.length !== args.model_ids.length) {
+      const foundIds = models.map((m) => m.id);
+      const missingIds = args.model_ids.filter((id) => !foundIds.includes(id));
+      return err(`Models not found: ${missingIds.join(", ")}`);
+    }
+
+    if (models.length < 2) {
+      return err("At least 2 valid models required for comparison");
+    }
+
+    const comparison = models.map((m) => ({
+      id: m.id,
+      name: m.name,
+      category: m.category,
+      description: m.description,
+      context_length: m.contextLength,
+      max_tokens: m.maxTokens,
+      output_max_tokens: m.outputMaxTokens,
+      license: m.license,
+      commercial_use: m.commercialUse,
+      third_party_model: m.thirdPartyModel,
+      min_gpu_requirements: m.minGpuRequirements,
+      supported_hardware: m.supportedHardware,
+      runtime_engines: m.runtimeEngines,
+      supports_streaming: m.supportsStreaming,
+      supports_function_calling: m.supportsFunctionCalling,
+      supports_vision: m.supportsVision ?? false,
+      supports_image_generation: m.supportsImageGeneration ?? false,
+      supports_multimodal: m.supportsMultimodalInput ?? false,
+      supports_video_input: m.supportsVideoInput ?? false,
+      supports_reasoning: m.supportsReasoning ?? false,
+      reasoning_modes: m.reasoningModes,
+      supports_structured_output: m.supportsStructuredOutput,
+      tags: m.tags,
+      benchmarks: m.benchmarks,
+      image_gen_specs: m.imageGenSpecs,
+      supported_languages: m.supportedLanguages,
+    }));
+
+    return ok({
+      compared_models: comparison.length,
+      models: comparison,
     });
   }
 }
@@ -297,6 +560,7 @@ function getUseCases(category: string): string[] {
     vision: ["Image understanding", "Visual Q&A", "Document analysis"],
     code: ["Code generation", "Code review", "Debugging", "Documentation"],
     multimodal: ["Multi-modal tasks", "Image + text processing"],
+    image_generation: ["Artistic creation", "Concept art", "Marketing materials", "Product visualization"],
   };
   return useCases[category] ?? [];
 }

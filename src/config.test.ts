@@ -15,18 +15,12 @@ describe('Config', () => {
 
   it('should load config from environment variables', () => {
     process.env.NVIDIA_API_KEY = 'test-key';
-    process.env.NVIDIA_CHAT_MODEL = 'chat-model';
-    process.env.NVIDIA_EMBEDDINGS_MODEL = 'embeddings-model';
-    process.env.NVIDIA_RERANKING_MODEL = 'reranking-model';
     process.env.MCP_SERVER_PORT = '8080';
     process.env.LOG_LEVEL = 'debug';
 
     const loadedConfig = getConfig(); // Call the function to get config
 
     expect(loadedConfig.NVIDIA_API_KEY).toBe('test-key');
-    expect(loadedConfig.NVIDIA_CHAT_MODEL).toBe('chat-model');
-    expect(loadedConfig.NVIDIA_EMBEDDINGS_MODEL).toBe('embeddings-model');
-    expect(loadedConfig.NVIDIA_RERANKING_MODEL).toBe('reranking-model');
     expect(loadedConfig.MCP_SERVER_PORT).toBe(8080);
     expect(loadedConfig.LOG_LEVEL).toBe('debug');
   });

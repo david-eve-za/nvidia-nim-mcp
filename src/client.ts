@@ -5,8 +5,6 @@ import { logger } from "./logger.js";
 
 const config = getConfig();
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string | ContentPart[];
@@ -15,7 +13,7 @@ export interface ChatMessage {
 export interface ContentPart {
   type: "text" | "image_url";
   text?: string;
-  image_url?: { url: string };
+  image_url?: { url: string; detail?: "low" | "high" | "auto" };
 }
 
 export interface ChatCompletionRequest {
@@ -31,6 +29,7 @@ export interface ChatCompletionRequest {
   seed?: number;
   tools?: Tool[];
   tool_choice?: "auto" | "none" | { type: "function"; function: { name: string } };
+  response_format?: { type: "text" | "json_object" };
 }
 
 export interface Tool {
@@ -103,7 +102,40 @@ export interface RerankResponse {
   usage: { prompt_tokens: number; total_tokens: number };
 }
 
-// ─── Rate Limiter ─────────────────────────────────────────────────────────────
+export interface ImageGenerationRequest {
+  model: string;
+  prompt: string;
+  negative_prompt?: string;
+  width?: number;
+  height?: number;
+  num_images?: number;
+  steps?: number;
+  cfg_scale?: number;
+  seed?: number;
+  sampler?: string;
+  scheduler?: string;
+  response_format?: "url" | "b64_json";
+}
+
+export interface ImageGenerationResponse {
+  created: number;
+  model?: string;
+  data: Array<{
+    url?: string;
+    b64_json?: string;
+    revised_prompt?: string;
+  }>;
+  usage?: { total_images: number };
+}
+
+export interface ImageAnalysisRequest {
+  model: string;
+  messages: ChatMessage[];
+  temperature?: number;
+  top_p?: number;
+  max_tokens?: number;
+  stream?: boolean;
+}
 
 class RateLimiter {
   private requests: number[] = [];
@@ -130,16 +162,26 @@ class RateLimiter {
   }
 }
 
-// ─── Client ───────────────────────────────────────────────────────────────────
+interface HttpClient {
+  http: AxiosInstance;
+  rateLimiter: RateLimiter;
+}
 
 export class NIMClient {
-  private readonly http: AxiosInstance;
-  private readonly rateLimiter: RateLimiter;
+  private readonly httpClient: HttpClient;
 
   constructor() {
-    this.rateLimiter = new RateLimiter(config.MAX_REQUESTS_PER_MINUTE);
+    this.httpClient = this.createHttpClient();
 
-    this.http = axios.create({
+    logger.info("NIMClient initialized", {
+      baseUrl: config.NVIDIA_NIM_BASE_URL,
+    });
+  }
+
+  private createHttpClient(): HttpClient {
+    const rateLimiter = new RateLimiter(config.MAX_REQUESTS_PER_MINUTE);
+
+    const http = axios.create({
       baseURL: config.NVIDIA_NIM_BASE_URL,
       timeout: config.REQUEST_TIMEOUT_MS,
       headers: {
@@ -149,7 +191,7 @@ export class NIMClient {
       },
     });
 
-    axiosRetry(this.http, {
+    axiosRetry(http, {
       retries: config.MAX_RETRIES,
       retryDelay: (retryCount) => {
         const delay = config.RETRY_DELAY_MS * Math.pow(2, retryCount - 1);
@@ -158,7 +200,6 @@ export class NIMClient {
       },
       retryCondition: (error: AxiosError) => {
         const status = error.response?.status;
-        // Retry on 429, 500, 502, 503, 504
         return (
           axiosRetry.isNetworkError(error) ||
           status === 429 ||
@@ -173,8 +214,7 @@ export class NIMClient {
       },
     });
 
-    // Request interceptor for logging
-    this.http.interceptors.request.use((req) => {
+    http.interceptors.request.use((req) => {
       logger.debug("NIM API request", {
         method: req.method?.toUpperCase(),
         url: req.url,
@@ -183,8 +223,7 @@ export class NIMClient {
       return req;
     });
 
-    // Response interceptor for logging
-    this.http.interceptors.response.use(
+    http.interceptors.response.use(
       (res) => {
         logger.debug("NIM API response", {
           status: res.status,
@@ -201,6 +240,8 @@ export class NIMClient {
         return Promise.reject(this.normalizeError(err));
       }
     );
+
+    return { http, rateLimiter };
   }
 
   private normalizeError(error: AxiosError): Error {
@@ -224,9 +265,8 @@ export class NIMClient {
   async chatCompletion(
     request: ChatCompletionRequest
   ): Promise<ChatCompletionResponse> {
-    await this.rateLimiter.acquire();
+    await this.httpClient.rateLimiter.acquire();
 
-    // Apply defaults
     const payload: ChatCompletionRequest = {
       temperature: config.DEFAULT_TEMPERATURE,
       top_p: config.DEFAULT_TOP_P,
@@ -238,86 +278,88 @@ export class NIMClient {
       stream: false,
     };
 
-    const { data } = await this.http.post<ChatCompletionResponse>(
+    const { data } = await this.httpClient.http.post<ChatCompletionResponse>(
       "/chat/completions",
       payload
     );
     return data;
   }
 
-  async *chatCompletionStream(
-    request: ChatCompletionRequest
-  ): AsyncGenerator<string> {
-    await this.rateLimiter.acquire();
-
-    const payload = {
-      temperature: config.DEFAULT_TEMPERATURE,
-      top_p: config.DEFAULT_TOP_P,
-      max_tokens: Math.min(
-        request.max_tokens ?? config.DEFAULT_MAX_TOKENS,
-        config.MAX_TOKENS_PER_REQUEST
-      ),
-      ...request,
-      stream: true,
-    };
-
-    const response = await this.http.post("/chat/completions", payload, {
-      responseType: "stream",
-    });
-
-    const stream = response.data as NodeJS.ReadableStream;
-
-    for await (const chunk of stream) {
-      const lines = (chunk as Buffer)
-        .toString("utf8")
-        .split("\n")
-        .filter((l: string) => l.startsWith("data: "));
-
-      for (const line of lines) {
-        const json = line.slice(6).trim();
-        if (json === "[DONE]") return;
-        try {
-          const parsed = JSON.parse(json);
-          const content = parsed.choices?.[0]?.delta?.content;
-          if (content) yield content;
-        } catch {
-          // skip malformed chunks
-        }
-      }
-    }
-  }
-
-  async embeddings(request: EmbeddingRequest): Promise<EmbeddingResponse> {
-    await this.rateLimiter.acquire();
-    const { data } = await this.http.post<EmbeddingResponse>(
+  async embeddings(
+    request: EmbeddingRequest
+  ): Promise<EmbeddingResponse> {
+    await this.httpClient.rateLimiter.acquire();
+    const { data } = await this.httpClient.http.post<EmbeddingResponse>(
       "/embeddings",
       request
     );
     return data;
   }
 
-  async rerank(request: RerankRequest): Promise<RerankResponse> {
-    await this.rateLimiter.acquire();
-    const { data } = await this.http.post<RerankResponse>(
+  async rerank(
+    request: RerankRequest
+  ): Promise<RerankResponse> {
+    await this.httpClient.rateLimiter.acquire();
+    const { data } = await this.httpClient.http.post<RerankResponse>(
       "/ranking",
       request
     );
     return data;
   }
 
+  async generateImage(
+    request: ImageGenerationRequest
+  ): Promise<ImageGenerationResponse> {
+    await this.httpClient.rateLimiter.acquire();
+
+    const payload = {
+      ...request,
+      response_format: request.response_format ?? "url",
+      width: request.width ?? 1024,
+      height: request.height ?? 1024,
+      num_images: request.num_images ?? 1,
+      steps: request.steps ?? 20,
+      cfg_scale: request.cfg_scale ?? 7.0,
+    };
+
+    const { data } = await this.httpClient.http.post<ImageGenerationResponse>(
+      "/images/generations",
+      payload,
+      {
+        timeout: config.IMAGE_GENERATION_TIMEOUT_MS,
+      }
+    );
+    return data;
+  }
+
+  async analyzeImage(
+    request: ImageAnalysisRequest
+  ): Promise<ChatCompletionResponse> {
+    await this.httpClient.rateLimiter.acquire();
+
+    const payload = {
+      ...request,
+      stream: false,
+    };
+
+    const { data } = await this.httpClient.http.post<ChatCompletionResponse>(
+      "/chat/completions",
+      payload
+    );
+    return data;
+  }
+
   async listModels(): Promise<string[]> {
-    await this.rateLimiter.acquire();
+    await this.httpClient.rateLimiter.acquire();
     try {
-      const { data } = await this.http.get<{ data: Array<{ id: string }> }>(
+      const { data } = await this.httpClient.http.get<{ data: Array<{ id: string }> }>(
         "/models"
       );
       return data.data.map((m) => m.id);
     } catch {
-      // If the API doesn't support listing, return catalog
       return Object.keys(NIM_MODELS_EXPORT);
     }
   }
 }
 
-// Re-export for convenience
 import { NIM_MODELS as NIM_MODELS_EXPORT } from "./models.js";

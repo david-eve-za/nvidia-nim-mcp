@@ -1,7 +1,7 @@
 {
   "name": "nvidia-nim-mcp",
-  "version": "1.0.0",
-  "description": "Production-ready MCP server for NVIDIA NIM models with GLM-5 specialization for software development and architecture",
+  "version": "2.0.0",
+  "description": "Production-ready MCP server for NVIDIA NIM models - 50+ LLMs, multimodal, image generation, embeddings, reranking with rich metadata for agent selection",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",

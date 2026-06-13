@@ -1,0 +1,35 @@
+{
+  "name": "nvidia-nim-mcp",
+  "version": "1.0.0",
+  "description": "NVIDIA NIM MCP Server for LLM, multimodal, image generation, embeddings, and reranking",
+  "command": "node",
+  "args": ["dist/index.js"],
+  "env": {
+    "NVIDIA_API_KEY": "${NVIDIA_API_KEY}",
+    "NVIDIA_NIM_BASE_URL": "https://integrate.api.nvidia.com/v1",
+    "LOG_LEVEL": "info",
+    "ENABLE_IMAGE_GENERATION": "true",
+    "ENABLE_VISION": "true",
+    "ENABLE_MULTIMODAL": "true"
+  },
+  "tools": [
+    "chat_completion",
+    "text_generation",
+    "create_embeddings",
+    "rerank_passages",
+    "function_calling",
+    "generate_image",
+    "analyze_image",
+    "multimodal_task",
+    "list_models",
+    "get_model_info",
+    "compare_models"
+  ],
+  "capabilities": {
+    "streaming": true,
+    "multimodal": true,
+    "function_calling": true,
+    "image_generation": true,
+    "vision": true
+  }
+}

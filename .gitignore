@@ -9,14 +9,17 @@ dist/
 .env
 .env.local
 .env.*.local
+*.env
 
 # Logs
 logs/
 *.log
 npm-debug.log*
 
-# IDE
-.vscode/
+# IDE (keep .vscode/mcp.json for Copilot, ignore rest of .vscode)
+.vscode/*
+!.vscode/mcp.json
+!.vscode/settings.json
 .idea/
 *.swp
 *.swo
@@ -27,7 +30,71 @@ Thumbs.db
 
 # Test
 coverage/
+.nyc_output/
 
 # Misc
 *.tgz
 .npm/
+
+# Skills (generated/third-party)
+skills/
+
+# Package artifacts
+*.tgz
+package-lock.json
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Jest cache
+.jest/
+
+# Turbo/Build cache
+.turbo/
+
+# Vercel/Next.js
+.vercel/
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+
+# Editor backup files
+*~
+*.bak
+*.orig
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local config overrides
+*.local
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Docker
+.dockerignore
+docker-compose*.yml
+
+# Documentation build
+docs/.vitepress/dist/
+site/
+
+# IDE - Keep project-specific settings, ignore user-specific
+.vscode/*.local
+.idea/workspace.xml
+.idea/inspectionProfiles/
+.idea/dataSources/
+.idea/dataSources.ids
+.idea/sqlDataSources.xml

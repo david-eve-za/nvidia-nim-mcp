@@ -10,6 +10,16 @@ describe('Models', () => {
       
       // Check that we have the specialized GLM-5 model
       expect(Object.keys(NIM_MODELS)).toContain('z-ai/glm5');
+      
+      // Check new image generation models
+      expect(Object.keys(NIM_MODELS)).toContain('nvidia/stable-diffusion-xl');
+      expect(Object.keys(NIM_MODELS)).toContain('nvidia/sdxl-turbo');
+      expect(Object.keys(NIM_MODELS)).toContain('stabilityai/sd-3-medium');
+      expect(Object.keys(NIM_MODELS)).toContain('black-forest-labs/flux.1-dev');
+      
+      // Check new multimodal models
+      expect(Object.keys(NIM_MODELS)).toContain('nvidia/neva-22b');
+      expect(Object.keys(NIM_MODELS)).toContain('microsoft/phi-3.5-vision-instruct');
     });
 
     it('should have proper model structure', () => {
@@ -23,6 +33,30 @@ describe('Models', () => {
       expect(typeof model.contextLength).toBe('number');
       expect(typeof model.supportsStreaming).toBe('boolean');
       expect(typeof model.supportsFunctionCalling).toBe('boolean');
+    });
+
+    it('should have proper image generation model structure', () => {
+      const model = NIM_MODELS['nvidia/stable-diffusion-xl'];
+      
+      expect(model).toBeDefined();
+      expect(model.id).toBe('nvidia/stable-diffusion-xl');
+      expect(model.category).toBe('image_generation');
+      expect(model.supportsImageGeneration).toBe(true);
+      expect(model.maxTokens).toBeDefined();
+      expect(model.recommendedUseCases).toBeDefined();
+      expect(model.imageGenSpecs).toBeDefined();
+      expect(model.imageGenSpecs?.maxImagesPerRequest).toBeDefined();
+      expect(model.imageGenSpecs?.supportedResolutions).toBeDefined();
+    });
+
+    it('should have proper multimodal model structure', () => {
+      const model = NIM_MODELS['nvidia/neva-22b'];
+      
+      expect(model).toBeDefined();
+      expect(model.id).toBe('nvidia/neva-22b');
+      expect(model.category).toBe('multimodal');
+      expect(model.supportsVision).toBe(true);
+      expect(model.recommendedUseCases).toBeDefined();
     });
   });
 
@@ -68,6 +102,36 @@ describe('Models', () => {
       expect(glm5!.name).toBe('GLM-5');
     });
 
+    it('should return models for image_generation category', () => {
+      const imageModels = getModelsByCategory('image_generation');
+      
+      expect(imageModels.length).toBeGreaterThan(0);
+      imageModels.forEach(model => {
+        expect(model.category).toBe('image_generation');
+        expect(model.supportsImageGeneration).toBe(true);
+      });
+    });
+
+    it('should return models for multimodal category', () => {
+      const multimodalModels = getModelsByCategory('multimodal');
+      
+      expect(multimodalModels.length).toBeGreaterThan(0);
+      multimodalModels.forEach(model => {
+        expect(model.category).toBe('multimodal');
+        expect(model.supportsVision).toBe(true);
+      });
+    });
+
+    it('should return models for vision category', () => {
+      const visionModels = getModelsByCategory('vision');
+      
+      expect(visionModels.length).toBeGreaterThan(0);
+      visionModels.forEach(model => {
+        expect(model.category).toBe('vision');
+        expect(model.supportsVision).toBe(true);
+      });
+    });
+
     it('should return empty array for non-existent category', () => {
       const nonexistentModels = getModelsByCategory('nonexistent' as any);
       expect(nonexistentModels).toEqual([]);
@@ -98,6 +162,24 @@ describe('Models', () => {
       expect(model!.supportsFunctionCalling).toBe(true);
       expect(model!.supportsStreaming).toBe(true);
     });
+
+    it('should return image generation model with correct properties', () => {
+      const model = getModel('nvidia/stable-diffusion-xl');
+      
+      expect(model).toBeDefined();
+      expect(model!.id).toBe('nvidia/stable-diffusion-xl');
+      expect(model!.category).toBe('image_generation');
+      expect(model!.supportsImageGeneration).toBe(true);
+    });
+
+    it('should return multimodal model with correct properties', () => {
+      const model = getModel('nvidia/neva-22b');
+      
+      expect(model).toBeDefined();
+      expect(model!.id).toBe('nvidia/neva-22b');
+      expect(model!.category).toBe('multimodal');
+      expect(model!.supportsVision).toBe(true);
+    });
   });
 
   describe('model categories', () => {
@@ -108,7 +190,10 @@ describe('Models', () => {
       expect(categories).toContain('embedding');
       expect(categories).toContain('reranking');
       expect(categories).toContain('code');
-      expect(categories.size).toBeGreaterThanOrEqual(4);
+      expect(categories).toContain('image_generation');
+      expect(categories).toContain('multimodal');
+      expect(categories).toContain('vision');
+      expect(categories.size).toBeGreaterThanOrEqual(7);
     });
 
     it('should have appropriate context lengths', () => {
@@ -116,7 +201,19 @@ describe('Models', () => {
       
       models.forEach(model => {
         expect(model.contextLength).toBeGreaterThan(0);
-        expect(model.contextLength).toBeLessThanOrEqual(131072); // 128K max
+        // Allow up to 1M for ultra-long context models (Kimi K2.6, MiniMax M3)
+        expect(model.contextLength).toBeLessThanOrEqual(1000000); // 1M max
+      });
+    });
+
+    it('should have recommended use cases for all models', () => {
+      const models = Object.values(NIM_MODELS);
+      
+      models.forEach(model => {
+        if (model.recommendedUseCases) {
+          expect(Array.isArray(model.recommendedUseCases)).toBe(true);
+          expect(model.recommendedUseCases.length).toBeGreaterThan(0);
+        }
       });
     });
   });

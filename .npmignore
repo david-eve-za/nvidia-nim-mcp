@@ -43,12 +43,22 @@ docker-compose*.yml
 .git/
 .gitignore
 
-# Documentation (keep README.md)
+# Documentation (keep README.md, LICENSE, CONFIGURATIONS.md)
 docs/
 *.md
 !README.md
 !LICENSE
+!CONFIGURATIONS.md
 
 # Misc
 .DS_Store
 Thumbs.db
+
+# Config files (keep for distribution)
+config/
+
+# Opencode config (keep for distribution)
+.opencode/
+
+# Skills (third-party/generated)
+skills/

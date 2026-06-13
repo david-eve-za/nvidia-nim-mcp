@@ -1,0 +1,157 @@
+{
+  "name": "nvidia-nim-mcp",
+  "version": "1.0.0",
+  "description": "NVIDIA NIM MCP Server - 50+ models for LLM, multimodal, image generation, embeddings, reranking",
+  "homepage": "https://github.com/nvidia/nim-mcp",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nvidia/nim-mcp.git"
+  },
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "nvidia",
+    "nim",
+    "llm",
+    "multimodal",
+    "image-generation",
+    "embeddings",
+    "reranking",
+    "function-calling"
+  ],
+  "server": {
+    "command": "node",
+    "args": ["dist/index.js"],
+    "cwd": "/path/to/nvidia-nim-mcp",
+    "env": {
+      "NVIDIA_API_KEY": "${NVIDIA_API_KEY}",
+      "NVIDIA_NIM_BASE_URL": "https://integrate.api.nvidia.com/v1",
+      "LOG_LEVEL": "info",
+      "ENABLE_IMAGE_GENERATION": "true",
+      "ENABLE_VISION": "true",
+      "ENABLE_MULTIMODAL": "true"
+    }
+  },
+  "capabilities": {
+    "tools": true,
+    "resources": false,
+    "prompts": false,
+    "streaming": true
+  },
+  "tools": {
+    "chat_completion": {
+      "description": "Multi-turn conversation with any NIM LLM (50+ models)",
+      "supports_streaming": false
+    },
+    "text_generation": {
+      "description": "Single-prompt text generation (simplified interface)",
+      "supports_streaming": false
+    },
+    "create_embeddings": {
+      "description": "Convert text to vector embeddings (NV-Embed, BGE-M3)",
+      "supports_streaming": false
+    },
+    "rerank_passages": {
+      "description": "Rerank passages by relevance (NV-RerankQA)",
+      "supports_streaming": false
+    },
+    "function_calling": {
+      "description": "Use NIM models with tool/function calling",
+      "supports_streaming": false
+    },
+    "generate_image": {
+      "description": "Generate images from text (FLUX.1, SDXL, SD3, DiffusionGemma)",
+      "supports_streaming": false
+    },
+    "analyze_image": {
+      "description": "Analyze/describe images (Llama 3.2 Vision, Kimi K2.6, MiniMax M3, Phi-3.5 Vision)",
+      "supports_streaming": false
+    },
+    "multimodal_task": {
+      "description": "Multimodal tasks combining text + images (MiniMax M3, Kimi K2.6, Qwen 3.5 397B, Mistral Large 3)",
+      "supports_streaming": false
+    },
+    "list_models": {
+      "description": "List models with rich metadata and advanced filtering",
+      "supports_streaming": false
+    },
+    "get_model_info": {
+      "description": "Get complete model metadata (licensing, hardware, benchmarks)",
+      "supports_streaming": false
+    },
+    "compare_models": {
+      "description": "Compare 2-5 models side-by-side for decision making",
+      "supports_streaming": false
+    }
+  },
+  "model_metadata": {
+    "total_models": 52,
+    "categories": {
+      "language": 22,
+      "code": 3,
+      "vision": 2,
+      "multimodal": 8,
+      "image_generation": 5,
+      "embedding": 3,
+      "reranking": 1
+    },
+    "highlighted_models": {
+      "frontier_reasoning": [
+        "nvidia/nemotron-3-ultra-550b-a55b",
+        "deepseek-ai/deepseek-v4-pro",
+        "moonshotai/kimi-k2.6",
+        "z-ai/glm-5.1",
+        "mistralai/mistral-large-3-675b-instruct-2512"
+      ],
+      "code_specialized": [
+        "z-ai/glm-5.1",
+        "z-ai/glm5",
+        "qwen/qwen2.5-coder-32b-instruct"
+      ],
+      "multimodal_vision": [
+        "minimaxai/minimax-m3",
+        "moonshotai/kimi-k2.6",
+        "meta/llama-3.2-90b-vision-instruct",
+        "qwen/qwen3.5-397b-a17b"
+      ],
+      "image_generation": [
+        "black-forest-labs/flux.1-dev",
+        "black-forest-labs/flux.1-kontext-dev",
+        "nvidia/stable-diffusion-xl",
+        "stabilityai/sd-3-medium"
+      ],
+      "open_weight": [
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-120b-chat"
+      ]
+    }
+  },
+  "installation": {
+    "npm_global": "npm install -g nvidia-nim-mcp",
+    "npm_local": "npm install nvidia-nim-mcp",
+    "docker": "docker run -e NVIDIA_API_KEY=nvapi-key nvidia-nim-mcp",
+    "source": {
+      "clone": "git clone https://github.com/nvidia/nim-mcp.git",
+      "install": "npm install",
+      "build": "npm run build",
+      "run": "npm start"
+    }
+  },
+  "environment_variables": {
+    "required": ["NVIDIA_API_KEY"],
+    "optional": {
+      "NVIDIA_NIM_BASE_URL": "https://integrate.api.nvidia.com/v1",
+      "LOG_LEVEL": "info",
+      "ENABLE_IMAGE_GENERATION": "true",
+      "ENABLE_VISION": "true",
+      "ENABLE_MULTIMODAL": "true",
+      "MAX_REQUESTS_PER_MINUTE": 40,
+      "MAX_TOKENS_PER_REQUEST": 4096,
+      "REQUEST_TIMEOUT_MS": 120000,
+      "MAX_RETRIES": 3,
+      "RETRY_DELAY_MS": 1000,
+      "DEFAULT_MODEL": "black-forest-labs/flux.1-dev"
+    }
+  }
+}
