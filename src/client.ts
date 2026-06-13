@@ -1,9 +1,53 @@
 import axios, { AxiosInstance, AxiosError } from "axios";
 import axiosRetry from "axios-retry";
+import http from "http";
+import https from "https";
 import { getConfig } from "./config.js";
 import { logger } from "./logger.js";
 
 const config = getConfig();
+
+// Create HTTP/HTTPS agents with keep-alive for connection reuse
+const httpAgent = new http.Agent({
+  keepAlive: true,
+  keepAliveMsecs: 30_000,
+  maxSockets: 50,
+  maxFreeSockets: 10,
+  timeout: 60_000,
+  scheduling: "lifo",
+});
+
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  keepAliveMsecs: 30_000,
+  maxSockets: 50,
+  maxFreeSockets: 10,
+  timeout: 60_000,
+  scheduling: "lifo",
+});
+
+// Network error codes that should trigger a retry
+const RETRYABLE_NETWORK_CODES = new Set([
+  "ECONNRESET",
+  "ETIMEDOUT",
+  "ENOTFOUND",
+  "ECONNREFUSED",
+  "EPIPE",
+  "ECONNABORTED",
+  "EAI_AGAIN",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+]);
+
+function isRetryableNetworkError(error: AxiosError): boolean {
+  if (axiosRetry.isNetworkError(error)) return true;
+  if (error.code && RETRYABLE_NETWORK_CODES.has(error.code)) return true;
+  // Check for timeout error message
+  if (error.message?.includes("timeout") || error.message?.includes("ECONNABORTED")) return true;
+  // Check for connection closed/reset in error message
+  if (error.message?.includes("Connection closed") || error.message?.includes("socket hang up")) return true;
+  return false;
+}
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -184,10 +228,13 @@ export class NIMClient {
     const http = axios.create({
       baseURL: config.NVIDIA_NIM_BASE_URL,
       timeout: config.REQUEST_TIMEOUT_MS,
+      httpAgent,
+      httpsAgent,
       headers: {
         Authorization: `Bearer ${config.NVIDIA_API_KEY}`,
         "Content-Type": "application/json",
         "User-Agent": `${config.MCP_SERVER_NAME}/${config.MCP_SERVER_VERSION}`,
+        "Connection": "keep-alive",
       },
     });
 
@@ -201,7 +248,7 @@ export class NIMClient {
       retryCondition: (error: AxiosError) => {
         const status = error.response?.status;
         return (
-          axiosRetry.isNetworkError(error) ||
+          isRetryableNetworkError(error) ||
           status === 429 ||
           (status !== undefined && status >= 500)
         );
@@ -209,6 +256,7 @@ export class NIMClient {
       onRetry: (retryCount, error) => {
         logger.warn(`Retrying request (${retryCount}/${config.MAX_RETRIES})`, {
           status: (error as AxiosError).response?.status,
+          code: error.code,
           message: error.message,
         });
       },
@@ -251,6 +299,25 @@ export class NIMClient {
       (data?.detail as string) ||
       (data?.message as string) ||
       error.message;
+
+    // Handle connection-level errors (no HTTP response)
+    if (!error.response) {
+      if (error.code && RETRYABLE_NETWORK_CODES.has(error.code)) {
+        return new Error(
+          `Connection error (${error.code}): ${error.message}. ` +
+          `The connection to NVIDIA NIM was closed unexpectedly. ` +
+          `This may be due to network instability, server overload, or firewall rules. ` +
+          `The request will be retried automatically (attempt ${error.config?.headers?.["Retry-Count"] ?? "1"}/${config.MAX_RETRIES}).`
+        );
+      }
+      if (error.message?.includes("timeout") || error.code === "ECONNABORTED") {
+        return new Error(
+          `Request timeout after ${config.REQUEST_TIMEOUT_MS}ms: ${error.message}. ` +
+          `Consider increasing REQUEST_TIMEOUT_MS for long-running operations like image generation.`
+        );
+      }
+      return new Error(`Network error: ${error.message}`);
+    }
 
     if (status === 401) return new Error(`Authentication failed: ${apiMsg}`);
     if (status === 403) return new Error(`Authorization failed: ${apiMsg}`);
