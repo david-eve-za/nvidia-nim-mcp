@@ -15,6 +15,9 @@ import {
   MultimodalTaskSchema,
   CompareModelsSchema,
 } from "./tools.js";
+import { z } from "zod";
+import { writeFileSync, mkdirSync, existsSync } from "fs";
+import { dirname, resolve } from "path";
 
 const config = getConfig();
 
@@ -32,6 +35,48 @@ function err(message: string): ToolResult {
   return {
     content: [{ type: "text", text: `Error: ${message}` }],
     isError: true,
+  };
+}
+
+// Extended schema for FLUX Kontext (image-to-image)
+const FluxKontextSchema = ImageGenerationSchema.extend({
+  image: z.string().optional().describe("Base64 data URL of input image (required for FLUX Kontext)"),
+  aspect_ratio: z.string().optional().describe("Aspect ratio for output (e.g., 'match_input_image', '1:1', '16:9')"),
+  // File save options
+  save_path: z.string().optional().describe("Optional file path to save the generated image as PNG (e.g., './output/image.png' or '/absolute/path/image.png')"),
+  save_filename: z.string().optional().describe("Optional filename (without extension) to auto-generate path in current directory"),
+});
+
+// Helper function to save base64 image as PNG file
+function saveBase64Image(base64: string, savePath?: string, saveFilename?: string): { path: string; absolutePath: string } | null {
+  if (!savePath && !saveFilename) {
+    return null;
+  }
+
+  let filePath: string;
+  if (savePath) {
+    filePath = resolve(savePath);
+  } else {
+    const timestamp = Date.now();
+    const filename = `${saveFilename || `generated_${timestamp}`}.png`;
+    filePath = resolve(process.cwd(), filename);
+  }
+
+  // Ensure directory exists
+  const dir = dirname(filePath);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+
+  // Remove data URL prefix if present
+  const base64Data = base64.replace(/^data:image\/[a-z]+;base64,/, "");
+  const buffer = Buffer.from(base64Data, "base64");
+  
+  writeFileSync(filePath, buffer);
+  
+  return {
+    path: filePath,
+    absolutePath: filePath,
   };
 }
 
@@ -263,6 +308,80 @@ export class ToolHandlers {
     const args = ImageGenerationSchema.parse(rawArgs);
     const model = args.model ?? config.DEFAULT_IMAGE_MODEL;
 
+    // Route to appropriate backend based on model
+    const isFluxSchnell = model === "black-forest-labs/flux.1-schnell" || model === config.DEFAULT_FLUX_SCHNELL_MODEL;
+    const isFluxKontext = model === "black-forest-labs/flux.1-kontext-dev" || model === config.DEFAULT_FLUX_KONTEXT_MODEL;
+
+    // FLUX.1-schnell: Fast text-to-image via AI Foundation
+    if (isFluxSchnell) {
+      const fluxArgs = FluxKontextSchema.parse(rawArgs); // Reuse schema, image is optional
+      const response = await this.client.generateImageFluxSchnell({
+        prompt: fluxArgs.prompt,
+        width: fluxArgs.width,
+        height: fluxArgs.height,
+        seed: fluxArgs.seed,
+      });
+
+      const images = response.data.map((img, idx) => {
+        const saved = saveBase64Image(img.b64_json, fluxArgs.save_path, fluxArgs.save_filename);
+        return {
+          index: idx,
+          b64_json: img.b64_json,
+          revised_prompt: img.revised_prompt,
+          saved_path: saved?.absolutePath,
+        };
+      });
+
+      return ok({
+        model: response.model,
+        created: response.created,
+        images,
+        usage: response.usage,
+      });
+    }
+
+    // FLUX.1-kontext-dev: Image-to-image editing via AI Foundation
+    if (isFluxKontext) {
+      const fluxArgs = FluxKontextSchema.parse(rawArgs);
+      if (!fluxArgs.image) {
+        return err("FLUX Kontext requires an 'image' parameter (base64 data URL of input image)");
+      }
+
+      const response = await this.client.generateImageFluxKontext({
+        prompt: fluxArgs.prompt,
+        image: fluxArgs.image,
+        aspect_ratio: fluxArgs.aspect_ratio,
+        steps: fluxArgs.steps,
+        cfg_scale: fluxArgs.cfg_scale,
+        seed: fluxArgs.seed,
+      });
+
+      const images = response.data.map((img, idx) => {
+        const saved = saveBase64Image(img.b64_json, fluxArgs.save_path, fluxArgs.save_filename);
+        return {
+          index: idx,
+          b64_json: img.b64_json,
+          revised_prompt: img.revised_prompt,
+          saved_path: saved?.absolutePath,
+        };
+      });
+
+      return ok({
+        model: response.model,
+        created: response.created,
+        images,
+        usage: response.usage,
+      });
+    }
+
+    // Self-hosted NIM (SDXL, SD3, flux.1-dev, etc.)
+    if (!config.DEFAULT_IMAGE_MODEL && !args.model) {
+      return err(
+        "No default image generation model configured for self-hosted NIM. " +
+        "Set DEFAULT_IMAGE_MODEL or specify a model explicitly."
+      );
+    }
+
     const request: ImageGenerationRequest = {
       model,
       prompt: args.prompt,
@@ -275,20 +394,26 @@ export class ToolHandlers {
       seed: args.seed,
       sampler: args.sampler,
       scheduler: args.scheduler,
-      response_format: args.response_format,
+      response_format: args.response_format ?? "b64_json",
     };
 
     const response = await this.client.generateImage(request);
 
-    return ok({
-      model: response.model ?? model,
-      created: response.created,
-      images: response.data.map((img, idx) => ({
+    const images = response.data.map((img, idx) => {
+      const saved = saveBase64Image(img.b64_json ?? "", args.save_path, args.save_filename);
+      return {
         index: idx,
         url: img.url,
         b64_json: img.b64_json,
         revised_prompt: img.revised_prompt,
-      })),
+        saved_path: saved?.absolutePath,
+      };
+    });
+
+    return ok({
+      model: response.model ?? model,
+      created: response.created,
+      images,
       usage: response.usage,
     });
   }

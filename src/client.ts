@@ -254,7 +254,13 @@ export class NIMClient {
 
     if (status === 401) return new Error(`Authentication failed: ${apiMsg}`);
     if (status === 403) return new Error(`Authorization failed: ${apiMsg}`);
-    if (status === 404) return new Error(`Model not found: ${apiMsg}`);
+    if (status === 404) {
+      const msg = `Model not found: ${apiMsg}. ` +
+        `Note: Image generation models (SDXL, FLUX, SD3) are not deployed on the free integration endpoint. ` +
+        `They require dedicated GPU instances (H100/B200). ` +
+        `Use a self-hosted NIM or check https://build.nvidia.com for available models.`;
+      return new Error(msg);
+    }
     if (status === 422) return new Error(`Invalid request: ${apiMsg}`);
     if (status === 429) return new Error(`Rate limit exceeded: ${apiMsg}`);
     if (status && status >= 500)
@@ -330,6 +336,138 @@ export class NIMClient {
       }
     );
     return data;
+  }
+
+  // ─── FLUX.1-schnell (AI Foundation Models) ──────────────────────────────────
+  async generateImageFluxSchnell(request: {
+    prompt: string;
+    width?: number;
+    height?: number;
+    seed?: number;
+    steps?: number;
+  }): Promise<ImageGenerationResponse> {
+    await this.httpClient.rateLimiter.acquire();
+
+    const payload = {
+      prompt: request.prompt,
+      width: request.width ?? 1024,
+      height: request.height ?? 1024,
+      seed: request.seed ?? 0,
+      steps: 4, // FLUX Schnell is fixed at 4 steps
+    };
+
+    const modelId = config.DEFAULT_FLUX_SCHNELL_MODEL;
+    const url = `${config.NVIDIA_AI_FOUNDATION_URL}/${modelId}`;
+
+    logger.debug("FLUX Schnell request", { prompt: request.prompt, width: payload.width, height: payload.height });
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${config.NVIDIA_API_KEY}`,
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(config.IMAGE_GENERATION_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error("FLUX Schnell API error", { status: response.status, error: errorText });
+      throw new Error(`FLUX Schnell API error (${response.status}): ${errorText}`);
+    }
+
+    const data = await response.json() as {
+      images?: Array<{ b64_json: string; seed: number }>;
+      image?: { b64_json: string; seed: number };
+      seed: number;
+      data?: Array<{ b64_json: string; seed: number }>;
+      artifacts?: Array<{ base64: string; seed: number }>;
+      [key: string]: unknown;
+    };
+
+    logger.debug("FLUX Schnell response", { keys: Object.keys(data), hasImages: !!data.images, hasImage: !!data.image, hasData: !!data.data, hasArtifacts: !!data.artifacts, dataType: typeof data.data, imagesType: typeof data.images });
+
+    // Handle different response formats
+    const images = data.images ?? data.data ?? data.artifacts ?? (data.image ? [data.image] : []);
+
+    return {
+      created: Date.now(),
+      model: modelId,
+      data: images.map((img) => ({
+        b64_json: img.b64_json ?? img.base64,
+        revised_prompt: request.prompt,
+      })),
+      usage: { total_images: images.length },
+    };
+  }
+
+  // ─── FLUX.1-kontext-dev (AI Foundation Models) ──────────────────────────────
+  async generateImageFluxKontext(request: {
+    prompt: string;
+    image: string; // base64 data URL
+    aspect_ratio?: string;
+    steps?: number;
+    cfg_scale?: number;
+    seed?: number;
+  }): Promise<ImageGenerationResponse> {
+    await this.httpClient.rateLimiter.acquire();
+
+    const payload = {
+      prompt: request.prompt,
+      image: request.image,
+      aspect_ratio: request.aspect_ratio ?? "match_input_image",
+      steps: request.steps ?? 30,
+      cfg_scale: request.cfg_scale ?? 3.5,
+      seed: request.seed ?? 0,
+    };
+
+    const modelId = config.DEFAULT_FLUX_KONTEXT_MODEL;
+    const url = `${config.NVIDIA_AI_FOUNDATION_URL}/${modelId}`;
+
+    logger.debug("FLUX Kontext request", { prompt: request.prompt, aspect_ratio: payload.aspect_ratio, steps: payload.steps });
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${config.NVIDIA_API_KEY}`,
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(config.IMAGE_GENERATION_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error("FLUX Kontext API error", { status: response.status, error: errorText });
+      throw new Error(`FLUX Kontext API error (${response.status}): ${errorText}`);
+    }
+
+    const data = await response.json() as {
+      images?: Array<{ b64_json: string; seed: number }>;
+      image?: { b64_json: string; seed: number };
+      seed: number;
+      data?: Array<{ b64_json: string; seed: number }>;
+      artifacts?: Array<{ base64: string; seed: number }>;
+      [key: string]: unknown;
+    };
+
+    logger.debug("FLUX Kontext response", { keys: Object.keys(data), hasImages: !!data.images, hasImage: !!data.image, hasData: !!data.data, hasArtifacts: !!data.artifacts });
+
+    // Handle different response formats
+    const images = data.images ?? data.data ?? data.artifacts ?? (data.image ? [data.image] : []);
+
+    return {
+      created: Date.now(),
+      model: modelId,
+      data: images.map((img) => ({
+        b64_json: img.b64_json ?? img.base64,
+        revised_prompt: request.prompt,
+      })),
+      usage: { total_images: images.length },
+    };
   }
 
   async analyzeImage(

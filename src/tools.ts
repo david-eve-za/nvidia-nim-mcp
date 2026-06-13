@@ -92,6 +92,12 @@ export const ImageGenerationSchema = z.object({
   sampler: z.string().optional().describe("Sampler algorithm (e.g., euler, euler_a, dpmpp_2m)"),
   scheduler: z.string().optional().describe("Scheduler type (e.g., karras, exponential, simple)"),
   response_format: z.enum(["url", "b64_json"]).optional().default("url").describe("Response format"),
+  // FLUX Kontext specific parameters
+  image: z.string().optional().describe("Base64 data URL of input image (required for FLUX Kontext image-to-image editing)"),
+  aspect_ratio: z.string().optional().describe("Aspect ratio for output (e.g., 'match_input_image', '1:1', '16:9', '4:3')"),
+  // File save options
+  save_path: z.string().optional().describe("Optional file path to save the generated image as PNG (e.g., './output/image.png' or '/absolute/path/image.png')"),
+  save_filename: z.string().optional().describe("Optional filename (without extension) to auto-generate path in current directory"),
 });
 
 export const ImageAnalysisSchema = z.object({
@@ -305,22 +311,28 @@ export const TOOL_DEFINITIONS = [
   {
     name: "generate_image",
     description:
-      "Generate images from text prompts using NVIDIA NIM image generation models (Stable Diffusion XL, SDXL Turbo, SD3, FLUX.1). Supports various resolutions, samplers, and schedulers.",
+      "Generate images from text prompts using NVIDIA NIM image generation models (Stable Diffusion XL, SDXL Turbo, SD3, FLUX.1). Supports various resolutions, samplers, and schedulers. FLUX.1-schnell and FLUX.1-kontext-dev are available on the free NVIDIA AI Foundation tier. Can save generated images as PNG files to disk.",
     inputSchema: {
       type: "object",
       properties: {
-        model: { type: "string", description: "Image generation model ID (e.g., nvidia/stable-diffusion-xl, nvidia/sdxl-turbo, stabilityai/sd-3-medium, black-forest-labs/flux.1-dev)" },
+        model: { type: "string", description: "Image generation model ID (e.g., nvidia/stable-diffusion-xl, nvidia/sdxl-turbo, stabilityai/sd-3-medium, black-forest-labs/flux.1-dev, black-forest-labs/flux.1-schnell, black-forest-labs/flux.1-kontext-dev)" },
         prompt: { type: "string", description: "Text prompt describing the image to generate" },
         negative_prompt: { type: "string", description: "Negative prompt to avoid unwanted features" },
         width: { type: "integer", minimum: 64, maximum: 2048, default: 1024, description: "Image width in pixels" },
         height: { type: "integer", minimum: 64, maximum: 2048, default: 1024, description: "Image height in pixels" },
         num_images: { type: "integer", minimum: 1, maximum: 4, default: 1, description: "Number of images to generate" },
-        steps: { type: "integer", minimum: 1, maximum: 100, default: 20, description: "Number of diffusion steps" },
+        steps: { type: "integer", minimum: 1, maximum: 100, default: 20, description: "Number of diffusion steps (ignored for FLUX Schnell, fixed at 4)" },
         cfg_scale: { type: "number", minimum: 1, maximum: 20, default: 7.0, description: "Classifier-free guidance scale" },
         seed: { type: "integer", description: "Random seed for reproducibility" },
         sampler: { type: "string", description: "Sampler algorithm (e.g., euler, euler_a, dpmpp_2m, dpmpp_sde, ddim)" },
         scheduler: { type: "string", description: "Scheduler type (e.g., karras, exponential, simple, ddim_uniform)" },
         response_format: { type: "string", enum: ["url", "b64_json"], default: "url", description: "Response format: URL or base64 JSON" },
+        // FLUX Kontext specific parameters
+        image: { type: "string", description: "Base64 data URL of input image (required for FLUX Kontext image-to-image editing, format: data:image/png;base64,...)" },
+        aspect_ratio: { type: "string", description: "Aspect ratio for output (e.g., 'match_input_image', '1:1', '16:9', '4:3', '3:4', '21:9')" },
+        // File save options
+        save_path: { type: "string", description: "Optional file path to save the generated image as PNG (e.g., './output/image.png' or '/absolute/path/image.png')" },
+        save_filename: { type: "string", description: "Optional filename (without extension) to auto-generate path in current directory (e.g., 'my-image' creates './my-image.png')" },
       },
       required: ["prompt"],
     },

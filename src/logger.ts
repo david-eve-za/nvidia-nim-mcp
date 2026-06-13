@@ -23,7 +23,7 @@ export let logger: winston.Logger = winston.createLogger({
   },
   transports: [
     new winston.transports.Console({
-      stderrLevels: ["error", "warn"],
+      stderrLevels: ["error", "warn", "info", "debug", "silly"],
     }),
   ],
 });
@@ -46,7 +46,7 @@ export function initLogger(options: LoggerOptions) {
     },
     transports: [
       new winston.transports.Console({
-        stderrLevels: ["error", "warn"],
+        stderrLevels: ["error", "warn", "info", "debug", "silly"],
       }),
     ],
   });

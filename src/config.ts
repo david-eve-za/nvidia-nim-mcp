@@ -1,12 +1,18 @@
 import { z } from "zod";
 
 const ConfigSchema = z.object({
-  // NVIDIA API - Primary connection
+  // NVIDIA API - Primary connection (self-hosted NIM)
   NVIDIA_API_KEY: z.string().min(1, "NVIDIA_API_KEY is required"),
   NVIDIA_NIM_BASE_URL: z
     .string()
     .url()
     .default("https://integrate.api.nvidia.com/v1"),
+
+  // NVIDIA AI Foundation Models (cloud, free tier available)
+  NVIDIA_AI_FOUNDATION_URL: z
+    .string()
+    .url()
+    .default("https://ai.api.nvidia.com/v1/genai"),
 
   // Server
   MCP_SERVER_NAME: z.string().default("nvidia-nim-mcp"),
@@ -26,13 +32,15 @@ const ConfigSchema = z.object({
   RETRY_DELAY_MS: z.coerce.number().int().positive().default(1000),
 
   // Defaults
-  DEFAULT_MODEL: z.string().default("z-ai/glm5"),
+  DEFAULT_MODEL: z.string().default("meta/llama-3.1-8b-instruct"),
   DEFAULT_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.3),
   DEFAULT_TOP_P: z.coerce.number().min(0).max(1).default(0.95),
   DEFAULT_MAX_TOKENS: z.coerce.number().int().positive().default(4096),
 
-  // Image Generation
-  DEFAULT_IMAGE_MODEL: z.string().default("black-forest-labs/flux.1-dev"),
+  // Image Generation - AI Foundation Models (free tier available)
+  DEFAULT_IMAGE_MODEL: z.string().default("black-forest-labs/flux.1-schnell"),
+  DEFAULT_FLUX_SCHNELL_MODEL: z.string().default("black-forest-labs/flux.1-schnell"),
+  DEFAULT_FLUX_KONTEXT_MODEL: z.string().default("black-forest-labs/flux.1-kontext-dev"),
   IMAGE_GENERATION_TIMEOUT_MS: z.coerce.number().int().positive().default(300000),
 
   // Feature flags

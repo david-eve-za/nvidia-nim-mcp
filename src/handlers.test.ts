@@ -12,6 +12,8 @@ jest.mock('./client.js', () => {
         listModels: jest.fn(),
         generateImage: jest.fn(),
         analyzeImage: jest.fn(),
+        generateImageFluxSchnell: jest.fn(),
+        generateImageFluxKontext: jest.fn(),
       };
     }),
   };
@@ -358,55 +360,81 @@ describe('ToolHandlers', () => {
   });
 
   describe('generateImage', () => {
-    it('should handle image generation requests', async () => {
+    it('should use FLUX Schnell by default when no model specified', async () => {
       const mockResponse = {
-        model: 'nvidia/stable-diffusion-xl',
+        model: 'black-forest-labs/flux.1-schnell',
         created: Date.now(),
-        data: [
-          { url: 'https://example.com/image1.jpg', revised_prompt: 'Enhanced prompt' },
-          { url: 'https://example.com/image2.jpg', revised_prompt: 'Enhanced prompt 2' },
-        ],
-        usage: { total_images: 2 },
-      };
-
-      mockClient.generateImage.mockResolvedValue(mockResponse);
-
-      const args = {
-        prompt: 'A beautiful sunset over mountains',
-        width: 1024,
-        height: 1024,
-        num_images: 2,
-      };
-
-      const result = await handlers.handle('generate_image', args);
-
-      expect(result.isError).toBeFalsy();
-      const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.model).toBe('nvidia/stable-diffusion-xl');
-      expect(parsed.images).toHaveLength(2);
-      expect(parsed.images[0].url).toBe('https://example.com/image1.jpg');
-      expect(parsed.images[0].revised_prompt).toBe('Enhanced prompt');
-    });
-
-    it('should use default model when not specified', async () => {
-      const mockResponse = {
-        model: 'nvidia/stable-diffusion-xl',
-        created: Date.now(),
-        data: [{ url: 'https://example.com/image.jpg' }],
+        data: [{ b64_json: 'base64data', revised_prompt: 'Enhanced prompt' }],
         usage: { total_images: 1 },
       };
 
-      mockClient.generateImage.mockResolvedValue(mockResponse);
+      mockClient.generateImageFluxSchnell.mockResolvedValue(mockResponse);
 
       const args = {
-        prompt: 'A beautiful sunset',
+        prompt: 'A beautiful sunset over mountains',
       };
 
       const result = await handlers.handle('generate_image', args);
 
       expect(result.isError).toBeFalsy();
+      expect(mockClient.generateImageFluxSchnell).toHaveBeenCalled();
       const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.model).toBe('nvidia/stable-diffusion-xl');
+      expect(parsed.model).toBe('black-forest-labs/flux.1-schnell');
+    });
+
+    it('should use FLUX Schnell when explicitly specified', async () => {
+      const mockResponse = {
+        model: 'black-forest-labs/flux.1-schnell',
+        created: Date.now(),
+        data: [{ b64_json: 'base64data', revised_prompt: 'Enhanced prompt' }],
+        usage: { total_images: 1 },
+      };
+
+      mockClient.generateImageFluxSchnell.mockResolvedValue(mockResponse);
+
+      const args = {
+        prompt: 'A beautiful sunset',
+        model: 'black-forest-labs/flux.1-schnell',
+      };
+
+      const result = await handlers.handle('generate_image', args);
+
+      expect(result.isError).toBeFalsy();
+      expect(mockClient.generateImageFluxSchnell).toHaveBeenCalled();
+    });
+
+    it('should use FLUX Kontext when specified with image', async () => {
+      const mockResponse = {
+        model: 'black-forest-labs/flux.1-kontext-dev',
+        created: Date.now(),
+        data: [{ b64_json: 'base64data', revised_prompt: 'Enhanced prompt' }],
+        usage: { total_images: 1 },
+      };
+
+      mockClient.generateImageFluxKontext.mockResolvedValue(mockResponse);
+
+      const args = {
+        prompt: 'Now the cat is holding pizza',
+        model: 'black-forest-labs/flux.1-kontext-dev',
+        image: 'data:image/png;base64,example',
+      };
+
+      const result = await handlers.handle('generate_image', args);
+
+      expect(result.isError).toBeFalsy();
+      expect(mockClient.generateImageFluxKontext).toHaveBeenCalled();
+    });
+
+    it('should return error for FLUX Kontext without image', async () => {
+      const args = {
+        prompt: 'Now the cat is holding pizza',
+        model: 'black-forest-labs/flux.1-kontext-dev',
+      };
+
+      const result = await handlers.handle('generate_image', args);
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('FLUX Kontext requires an');
     });
   });
 
