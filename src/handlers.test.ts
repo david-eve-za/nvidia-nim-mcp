@@ -1,7 +1,43 @@
 import { ToolHandlers } from './handlers.js';
 import { NIMClient } from './client.js';
 
-// Mock the NIMClient
+jest.mock('./config.js', () => ({
+  getConfig: () => ({
+    NVIDIA_API_KEY: 'test-key',
+    NVIDIA_NIM_BASE_URL: 'https://test.api.nvidia.com/v1',
+    NVIDIA_AI_FOUNDATION_URL: 'https://ai.api.nvidia.com/v1/genai',
+    MCP_SERVER_NAME: 'test-server',
+    MCP_SERVER_VERSION: '1.0.0',
+    MCP_SERVER_PORT: 8080,
+    LOG_LEVEL: 'info',
+    MAX_REQUESTS_PER_MINUTE: 100,
+    MAX_TOKENS_PER_REQUEST: 2000,
+    REQUEST_TIMEOUT_MS: 5000,
+    MAX_RETRIES: 3,
+    RETRY_DELAY_MS: 100,
+    DEFAULT_MODEL: 'test-default-model',
+    DEFAULT_TEMPERATURE: 0.7,
+    DEFAULT_TOP_P: 0.9,
+    DEFAULT_MAX_TOKENS: 1000,
+    DEFAULT_IMAGE_MODEL: 'black-forest-labs/flux.1-schnell',
+    DEFAULT_FLUX_SCHNELL_MODEL: 'black-forest-labs/flux.1-schnell',
+    DEFAULT_FLUX_KONTEXT_MODEL: 'black-forest-labs/flux.1-kontext-dev',
+    IMAGE_GENERATION_TIMEOUT_MS: 300000,
+    ENABLE_IMAGE_GENERATION: true,
+    ENABLE_VISION: true,
+    ENABLE_MULTIMODAL: true,
+  }),
+}));
+
+jest.mock('./logger.js', () => ({
+  logger: {
+    error: jest.fn(),
+    warn: jest.fn(),
+    info: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
+
 jest.mock('./client.js', () => {
   return {
     NIMClient: jest.fn().mockImplementation(() => {
@@ -24,26 +60,6 @@ describe('ToolHandlers', () => {
   let mockClient: jest.Mocked<NIMClient>;
 
   beforeEach(() => {
-    // Setup environment variables
-    process.env.NVIDIA_API_KEY = 'test-key';
-    process.env.NVIDIA_NIM_BASE_URL = 'https://test.api.nvidia.com/v1';
-    process.env.MCP_SERVER_NAME = 'test-server';
-    process.env.MCP_SERVER_VERSION = '1.0.0';
-    process.env.MAX_REQUESTS_PER_MINUTE = '100';
-    process.env.REQUEST_TIMEOUT_MS = '5000';
-    process.env.MAX_RETRIES = '3';
-    process.env.RETRY_DELAY_MS = '100';
-    process.env.DEFAULT_MODEL = 'test-default-model';
-    process.env.DEFAULT_TEMPERATURE = '0.7';
-    process.env.DEFAULT_TOP_P = '0.9';
-    process.env.DEFAULT_MAX_TOKENS = '1000';
-    process.env.MAX_TOKENS_PER_REQUEST = '2000';
-    process.env.ENABLE_IMAGE_GENERATION = 'true';
-    process.env.ENABLE_VISION = 'true';
-    process.env.ENABLE_MULTIMODAL = 'true';
-    process.env.DEFAULT_IMAGE_MODEL = 'nvidia/stable-diffusion-xl';
-
-    // Create mock client
     mockClient = new NIMClient() as jest.Mocked<NIMClient>;
     handlers = new ToolHandlers(mockClient);
   });
