@@ -46,14 +46,15 @@
   ],
   "author": "David Gonzalez <david.eve.za@gmail.com>",
   "license": "MIT",
+  "mcpName": "io.github.david-eve-za/nvidia-nim-mcp",
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "https://github.com/david-eve-za/nvidia-nim-mcp.git"
   },
   "bugs": {
-    "url": ""
+    "url": "https://github.com/david-eve-za/nvidia-nim-mcp/issues"
   },
-  "homepage": "",
+  "homepage": "https://github.com/david-eve-za/nvidia-nim-mcp#readme",
   "engines": {
     "node": ">=18.0.0"
   },
