@@ -1,0 +1,20 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"  # Cambia según tu stack
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "security"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    reviewers:
+      - "ai-agent"
+    allow:
+      - dependency-type: "all"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-patch"]
